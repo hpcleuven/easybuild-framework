@@ -28,7 +28,6 @@ Unit tests for easyblock.py
 @author: Jens Timmerman (Ghent University)
 @author: Kenneth Hoste (Ghent University)
 """
-import copy
 import os
 import re
 import shutil
@@ -44,7 +43,6 @@ from easybuild.framework.easyconfig.tools import process_easyconfig
 from easybuild.framework.extensioneasyblock import ExtensionEasyBlock
 from easybuild.tools import config
 from easybuild.tools.build_log import EasyBuildError
-from easybuild.tools.environment import modify_env
 from easybuild.tools.filetools import mkdir, read_file, write_file
 from easybuild.tools.modules import modules_tool
 
@@ -99,7 +97,8 @@ class EasyBlockTest(EnhancedTestCase):
 
         name = "pi"
         version = "3.14"
-        self.contents =  '\n'.join([
+        self.contents = '\n'.join([
+            'easyblock = "ConfigureMake"',
             'name = "%s"' % name,
             'version = "%s"' % version,
             'homepage = "http://example.com"',
@@ -143,7 +142,7 @@ class EasyBlockTest(EnhancedTestCase):
         class TestExtension(ExtensionEasyBlock):
             @staticmethod
             def extra_options():
-                return ExtensionEasyBlock.extra_options([('extra_param', [None, "help", CUSTOM])])
+                return ExtensionEasyBlock.extra_options({'extra_param': [None, "help", CUSTOM]})
         texeb = TestExtension(eb, {'name': 'bar'})
         self.assertEqual(texeb.cfg['name'], 'bar')
         extra_options = texeb.extra_options()
@@ -158,6 +157,7 @@ class EasyBlockTest(EnhancedTestCase):
     def test_fake_module_load(self):
         """Testcase for fake module load"""
         self.contents = '\n'.join([
+            'easyblock = "ConfigureMake"',
             'name = "pi"',
             'version = "3.14"',
             'homepage = "http://example.com"',
@@ -177,6 +177,7 @@ class EasyBlockTest(EnhancedTestCase):
     def test_make_module_req(self):
         """Testcase for make_module_req"""
         self.contents = '\n'.join([
+            'easyblock = "ConfigureMake"',
             'name = "pi"',
             'version = "3.14"',
             'homepage = "http://example.com"',
@@ -212,6 +213,7 @@ class EasyBlockTest(EnhancedTestCase):
     def test_extensions_step(self):
         """Test the extensions_step"""
         self.contents = '\n'.join([
+            'easyblock = "ConfigureMake"',
             'name = "pi"',
             'version = "3.14"',
             'homepage = "http://example.com"',
@@ -228,7 +230,7 @@ class EasyBlockTest(EnhancedTestCase):
         self.assertErrorRegex(EasyBuildError, "No default extension class set", eb.extensions_step, fetch=True)
 
         # test if everything works fine if set
-        self.contents += "\nexts_defaultclass = ['easybuild.framework.extension', 'Extension']"
+        self.contents += "\nexts_defaultclass = 'DummyExtension'"
         self.writeEC()
         eb = EasyBlock(EasyConfig(self.eb_file))
         eb.builddir = config.build_path()
@@ -246,19 +248,19 @@ class EasyBlockTest(EnhancedTestCase):
     def test_skip_extensions_step(self):
         """Test the skip_extensions_step"""
         self.contents = '\n'.join([
+            'easyblock = "ConfigureMake"',
             'name = "pi"',
             'version = "3.14"',
             'homepage = "http://example.com"',
             'description = "test easyconfig"',
             'toolchain = {"name": "dummy", "version": "dummy"}',
             'exts_list = ["ext1", "ext2"]',
-            'exts_filter = ("if [ %(name)s == \'ext2\' ]; then exit 0; else exit 1; fi", "")',
-            'exts_defaultclass = ["easybuild.framework.extension", "Extension"]',
+            'exts_filter = ("if [ %(ext_name)s == \'ext2\' ]; then exit 0; else exit 1; fi", "")',
+            'exts_defaultclass = "DummyExtension"',
         ])
         # check if skip skips correct extensions
         self.writeEC()
         eb = EasyBlock(EasyConfig(self.eb_file))
-        #self.assertTrue('ext1' in eb.exts.keys() and 'ext2' in eb.exts.keys())
         eb.builddir = config.build_path()
         eb.installdir = config.install_path()
         eb.skip = True
@@ -282,6 +284,7 @@ class EasyBlockTest(EnhancedTestCase):
         modextravars = {'PI': '3.1415', 'FOO': 'bar'}
         modextrapaths = {'PATH': 'pibin', 'CPATH': 'pi/include'}
         self.contents = '\n'.join([
+            'easyblock = "ConfigureMake"',
             'name = "%s"' % name,
             'version = "%s"' % version,
             'homepage = "http://example.com"',
@@ -301,7 +304,6 @@ class EasyBlockTest(EnhancedTestCase):
         self.writeEC()
         ec = EasyConfig(self.eb_file)
         eb = EasyBlock(ec)
-        #eb.builddir = self.test_buildpath
         eb.installdir = os.path.join(config.install_path(), 'pi', '3.14')
         eb.check_readiness_step()
 
@@ -333,6 +335,7 @@ class EasyBlockTest(EnhancedTestCase):
     def test_gen_dirs(self):
         """Test methods that generate/set build/install directory names."""
         self.contents = '\n'.join([
+            'easyblock = "ConfigureMake"',
             "name = 'pi'",
             "version = '3.14'",
             "homepage = 'http://example.com'",
@@ -382,7 +385,7 @@ class EasyBlockTest(EnhancedTestCase):
         testdir = os.path.abspath(os.path.dirname(__file__))
         import easybuild
         eb_blocks_path = os.path.join(testdir, 'sandbox')
-        if not eb_blocks_path in sys.path:
+        if eb_blocks_path not in sys.path:
             sys.path.append(eb_blocks_path)
             easybuild = reload(easybuild)
 
@@ -399,6 +402,45 @@ class EasyBlockTest(EnhancedTestCase):
         eb_log_msg_re = re.compile(r"INFO This is easyblock %s from module %s (%s)" % tup, re.M)
         logtxt = read_file(eb.logfile)
         self.assertTrue(eb_log_msg_re.search(logtxt), "Pattern '%s' found in: %s" % (eb_log_msg_re.pattern, logtxt))
+
+    def test_fetch_patches(self):
+        """Test fetch_patches method."""
+        # adjust PYTHONPATH such that test easyblocks are found
+        testdir = os.path.abspath(os.path.dirname(__file__))
+        ec = process_easyconfig(os.path.join(testdir, 'easyconfigs', 'toy-0.0.eb'))[0]
+        eb = get_easyblock_instance(ec)
+
+        eb.fetch_patches()
+        self.assertEqual(len(eb.patches), 1)
+        self.assertEqual(eb.patches[0]['name'], 'toy-0.0_typo.patch')
+        self.assertFalse('level' in eb.patches[0])
+
+        # reset
+        eb.patches = []
+
+        patches = [
+            ('toy-0.0_typo.patch', 0),  # should also be level 0 (not None or something else)
+            ('toy-0.0_typo.patch', 4),   # should be level 4
+            ('toy-0.0_typo.patch', 'foobar'),  # sourcepath should be set to 'foobar'
+            ('toy-0.0.tar.gz', 'some/path'),  # copy mode (not a .patch file)
+        ]
+        # check if patch levels are parsed correctly
+        eb.fetch_patches(patch_specs=patches)
+
+        self.assertEqual(len(eb.patches), 4)
+        self.assertEqual(eb.patches[0]['name'], 'toy-0.0_typo.patch')
+        self.assertEqual(eb.patches[0]['level'], 0)
+        self.assertEqual(eb.patches[1]['name'], 'toy-0.0_typo.patch')
+        self.assertEqual(eb.patches[1]['level'], 4)
+        self.assertEqual(eb.patches[2]['name'], 'toy-0.0_typo.patch')
+        self.assertEqual(eb.patches[2]['sourcepath'], 'foobar')
+        self.assertEqual(eb.patches[3]['name'], 'toy-0.0.tar.gz'),
+        self.assertEqual(eb.patches[3]['copy'], 'some/path')
+
+        patches = [
+            ('toy-0.0_level4.patch', False),  # should throw an error, only int's an strings allowed here
+        ]
+        self.assertRaises(EasyBuildError, eb.fetch_patches, patch_specs=patches)
 
     def test_obtain_file(self):
         """Test obtain_file method."""
@@ -501,7 +543,6 @@ class EasyBlockTest(EnhancedTestCase):
         os.environ['EASYBUILD_MODULE_NAMING_SCHEME'] = 'HierarchicalMNS'
         init_config(build_options=build_options)
         self.setup_hierarchical_modules()
-        modtool = modules_tool()
 
         modfile_prefix = os.path.join(self.test_installpath, 'modules', 'all')
         mkdir(os.path.join(modfile_prefix, 'Compiler', 'GCC', '4.8.3'), parents=True)
