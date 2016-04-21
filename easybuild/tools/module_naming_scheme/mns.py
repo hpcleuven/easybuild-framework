@@ -1,11 +1,11 @@
 ##
-# Copyright 2011-2014 Ghent University
+# Copyright 2011-2016 Ghent University
 #
 # This file is part of EasyBuild,
 # originally created by the HPC team of Ghent University (http://ugent.be/hpc/en),
 # with support of Ghent University (http://ugent.be/hpc),
 # the Flemish Supercomputer Centre (VSC) (https://vscentrum.be/nl/en),
-# the Hercules foundation (http://www.herculesstichting.be/in_English)
+# Flemish Research Foundation (FWO) (http://www.fwo.be/en)
 # and the Department of Economy, Science and Innovation (EWI) (http://www.ewi-vlaanderen.be/en).
 #
 # http://github.com/hpcugent/easybuild
@@ -32,6 +32,8 @@ import re
 from vsc.utils import fancylogger
 from vsc.utils.patterns import Singleton
 
+from easybuild.tools.build_log import EasyBuildError
+
 
 class ModuleNamingScheme(object):
     """Abstract class for a module naming scheme implementation."""
@@ -50,7 +52,8 @@ class ModuleNamingScheme(object):
         if self.REQUIRED_KEYS is not None:
             return set(keys).issuperset(set(self.REQUIRED_KEYS))
         else:
-            self.log.error("Constant REQUIRED_KEYS is not defined, should specify required easyconfig parameters.")
+            raise EasyBuildError("Constant REQUIRED_KEYS is not defined, "
+                                 "should specify required easyconfig parameters.")
 
     def requires_toolchain_details(self):
         """
@@ -79,6 +82,18 @@ class ModuleNamingScheme(object):
         @return: string with module name, e.g. '<name>/<version>'
         """
         # by default: full module name doesn't include a $MODULEPATH subdir
+        return self.det_full_module_name(ec)
+
+    def det_install_subdir(self, ec):
+        """
+        Determine name of software installation subdirectory of install path.
+
+        @param ec: dict-like object with easyconfig parameter values; for now only the 'name',
+                   'version', 'versionsuffix' and 'toolchain' parameters are guaranteed to be available
+
+        @return: string with name of subdirectory, e.g.: '<compiler>/<mpi_lib>/<name>/<version>'
+        """
+        # by default: use full module name as name for install subdir
         return self.det_full_module_name(ec)
 
     def det_module_subdir(self, ec):
@@ -111,6 +126,18 @@ class ModuleNamingScheme(object):
         # by default: an empty list of subdirectories to extend $MODULEPATH with
         return []
 
+    def det_user_modpath_extensions(self, ec):
+        """
+        Determine list of subdirectories relative to the user-specific modules directory for which to extend
+        $MODULEPATH with when this module is loaded (if any).
+
+        @param ec: dict-like object with easyconfig parameter values; for now only the 'name',
+                   'version', 'versionsuffix' and 'toolchain' parameters are guaranteed to be available
+        @return: A list of $MODULEPATH subdirectories.
+        """
+        # by default: use "system" module path extensions of naming scheme
+        return self.det_modpath_extensions(ec)
+
     def det_init_modulepaths(self, ec):
         """
         Determine initial module paths, where the modules that are top of the hierarchy (if any) live.
@@ -131,10 +158,10 @@ class ModuleNamingScheme(object):
         Default implementation checks via a strict regex pattern, and assumes short module names are of the form:
             <name>/<version>[-<toolchain>]
         """
-        modname_regex = re.compile('^%s/\S+$' % re.escape(name))
+        modname_regex = re.compile('^%s(/\S+)?$' % re.escape(name))
         res = bool(modname_regex.match(short_modname))
 
-        tup = (short_modname, name, modname_regex.pattern, res)
-        self.log.debug("Checking whether '%s' is a module name for software with name '%s' via regex %s: %s" % tup)
+        self.log.debug("Checking whether '%s' is a module name for software with name '%s' via regex %s: %s",
+                       short_modname, name, modname_regex.pattern, res)
 
         return res

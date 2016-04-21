@@ -1,11 +1,11 @@
-# #
-# Copyright 2012-2013 Ghent University
+##
+# Copyright 2012-2016 Ghent University
 #
 # This file is part of EasyBuild,
 # originally created by the HPC team of Ghent University (http://ugent.be/hpc/en),
 # with support of Ghent University (http://ugent.be/hpc),
 # the Flemish Supercomputer Centre (VSC) (https://vscentrum.be/nl/en),
-# the Hercules foundation (http://www.herculesstichting.be/in_English)
+# Flemish Research Foundation (FWO) (http://www.fwo.be/en)
 # and the Department of Economy, Science and Innovation (EWI) (http://www.ewi-vlaanderen.be/en).
 #
 # http://github.com/hpcugent/easybuild
@@ -21,8 +21,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with EasyBuild.  If not, see <http://www.gnu.org/licenses/>.
-# #
-
+##
 """
 This script can be used to install easybuild-framework, e.g. using:
   easy_install --user .
@@ -31,13 +30,14 @@ or
 
 @author: Kenneth Hoste (Ghent University)
 """
-
+import glob
 import os
 from distutils import log
 
 from easybuild.tools.version import VERSION
 
 API_VERSION = str(VERSION).split('.')[0]
+
 
 # Utility function to read README file
 def read(fname):
@@ -54,6 +54,7 @@ except ImportError, err:
     from distutils.core import setup
 
 log.info("Installing version %s (API version %s)" % (VERSION, API_VERSION))
+
 
 def find_rel_test():
     """Return list of files recursively from basedir (aka find -type f)"""
@@ -72,38 +73,49 @@ easybuild_packages = [
     "easybuild", "easybuild.framework", "easybuild.framework.easyconfig", "easybuild.framework.easyconfig.format",
     "easybuild.toolchains", "easybuild.toolchains.compiler", "easybuild.toolchains.mpi",
     "easybuild.toolchains.fft", "easybuild.toolchains.linalg", "easybuild.tools", "easybuild.tools.deprecated",
-    "easybuild.tools.toolchain", "easybuild.tools.module_naming_scheme", "easybuild.tools.repository",
-    "test.framework", "test",
-    "vsc", "vsc.utils",
+    "easybuild.tools.job", "easybuild.tools.toolchain", "easybuild.tools.module_naming_scheme",
+    "easybuild.tools.package", "easybuild.tools.package.package_naming_scheme",
+    "easybuild.tools.repository", "test.framework", "test",
 ]
 
 setup(
-    name = "easybuild-framework",
-    version = str(VERSION),
-    author = "EasyBuild community",
-    author_email = "easybuild@lists.ugent.be",
-    description = """The EasyBuild framework supports the creation of custom easyblocks that \
+    name="easybuild-framework",
+    version=str(VERSION),
+    author="EasyBuild community",
+    author_email="easybuild@lists.ugent.be",
+    description="""The EasyBuild framework supports the creation of custom easyblocks that \
 implement support for installing particular (groups of) software packages.""",
-    license = "GPLv2",
-    keywords = "software build building installation installing compilation HPC scientific",
-    url = "http://hpcugent.github.com/easybuild",
-    packages = easybuild_packages,
-    package_dir = {'test.framework': "test/framework"},
-    package_data = {"test.framework": find_rel_test()},
-    scripts = ["eb", "optcomplete.bash", "minimal_bash_completion.bash"],
-    data_files = [],
-    long_description = read('README.rst'),
-    classifiers = [
+    license="GPLv2",
+    keywords="software build building installation installing compilation HPC scientific",
+    url="http://hpcugent.github.com/easybuild",
+    packages=easybuild_packages,
+    package_dir={'test.framework': 'test/framework'},
+    package_data={'test.framework': find_rel_test(),},
+    scripts=["eb", "optcomplete.bash", "minimal_bash_completion.bash", "eb_bash_completion.bash"],
+    data_files=[
+        ('easybuild/scripts', glob.glob('easybuild/scripts/*')),
+        ('etc', glob.glob('etc/*')),
+    ],
+    long_description=read('README.rst'),
+    classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Environment :: Console",
         "Intended Audience :: System Administrators",
         "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
         "Operating System :: POSIX :: Linux",
-        "Programming Language :: Python :: 2.4",
+        "Programming Language :: Python :: 2.6",
         "Topic :: Software Development :: Build Tools",
     ],
-    platforms = "Linux",
-    provides = ["eb"] + easybuild_packages,
-    test_suite = "test.framework.suite",
-    zip_safe = False,
+    platforms="Linux",
+    provides=["eb"] + easybuild_packages,
+    test_suite="test.framework.suite",
+    zip_safe=False,
+    install_requires=[
+        'setuptools >= 0.6',
+        "vsc-base >= 2.4.18",
+    ],
+    extras_require = {
+        'yeb': ["PyYAML >= 3.11"],
+    },
+    namespace_packages=['easybuild'],
 )
